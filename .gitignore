@@ -18,3 +18,4 @@ vivado_project/
 .vscode/
 Thumbs.db
 .DS_Store
+build/
