@@ -3,8 +3,6 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge, ReadOnly
 
 import random
-       
-
 
 
 @cocotb.test()
@@ -26,7 +24,7 @@ async def test_refmodel_complextest(dut):
     await RisingEdge(dut.clk)
     assert dut.valid_out.value == 0
 
-# helper function round_shift and saturate to use the same rounding and approximation model as the hardware is doing 
+# helper function round_shift and saturate to use the same rounding and approximation model as the hardware is doing
     def round_shift(value):
         FRAC_W = 15
         round_offset = 1 << (FRAC_W-1)
@@ -50,7 +48,7 @@ async def test_refmodel_complextest(dut):
         else:
             return value
 
-        #refernce model that will be compared to for every result produced by the fft
+        # refernce model that will be compared to for every result produced by the fft
 
     def reference_model(b_real, b_imag, w_real, w_imag):
         raw_real = b_real * w_real - b_imag * w_imag
@@ -93,8 +91,9 @@ async def test_refmodel_complextest(dut):
 
         w_real = random.randint(-(1 << 15), (1 << 15) - 1)
         w_imag = random.randint(-(1 << 15), (1 << 15) - 1)
-        expected_real, expected_imag = reference_model( b_real, b_imag, w_real, w_imag,)
-        
+        expected_real, expected_imag = reference_model(
+            b_real, b_imag, w_real, w_imag,)
+
         dut.b_real.value = b_real
         dut.b_imag.value = b_imag
         dut.w_real.value = w_real
@@ -103,31 +102,94 @@ async def test_refmodel_complextest(dut):
 
         await RisingEdge(dut.clk)
         dut.valid_in.value = 0
-        for j in range (3):
+        for j in range(3):
             await RisingEdge(dut.clk)
-        await ReadOnly() # waiting for it to settls
-
-        
+        await ReadOnly()  # waiting for it to settls
 
         assert int(dut.valid_out.value) == 1
         actual_real = dut.t_real.value.to_signed()
         actual_imag = dut.t_imag.value.to_signed()
-       
-        
+
         assert actual_real == expected_real, (
             f"real mismatch: B=({b_real},{b_imag}) "
             f"W=({w_real},{w_imag}) "
             f"expected={expected_real}, got={actual_real}"
-        )           
+        )
         assert actual_imag == expected_imag, (
             f"imag mismatch: B=({b_real},{b_imag}) "
             f"W=({w_real},{w_imag}) "
             f"expected={expected_imag}, got={actual_imag}"
-        )       
+        )
 
+        await FallingEdge(dut.clk)
 
-        await FallingEdge(dut.clk) 
+    expected_queue = []
+    for i in range(200):
+        b_real = random.randint(-(1 << 21), (1 << 21) - 1)
+        b_imag = random.randint(-(1 << 21), (1 << 21) - 1)
 
-        
+        w_real = random.randint(-(1 << 15), (1 << 15) - 1)
+        w_imag = random.randint(-(1 << 15), (1 << 15) - 1)
+        expected_real, expected_imag = reference_model(
+            b_real, b_imag, w_real, w_imag,)
+        expected_queue.append((expected_real, expected_imag))
 
+        dut.b_real.value = b_real
+        dut.b_imag.value = b_imag
+        dut.w_real.value = w_real
+        dut.w_imag.value = w_imag
+        dut.valid_in.value = 1
 
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+        if int(dut.valid_out.value) == 1:
+
+            actual_real = dut.t_real.value.to_signed()
+            actual_imag = dut.t_imag.value.to_signed()
+
+            expected_real, expected_imag = expected_queue.pop(0)
+            # Check the real output against the oldest expected real result
+            assert actual_real == expected_real, (
+                f"real mismatch: expected={expected_real}, "
+                f"got={actual_real}"
+            )
+
+            # Check the imaginary output against the oldest expected imaginary result
+            assert actual_imag == expected_imag, (
+                f"imag mismatch: expected={expected_imag}, "
+                f"got={actual_imag}"
+            )
+
+        await FallingEdge(dut.clk)
+
+    # Stop sending new transactions
+    dut.valid_in.value = 0
+
+# Drain the remaining outputs still inside the pipeline
+    while expected_queue:
+        await RisingEdge(dut.clk)
+        await ReadOnly()
+
+    # Only compare when the DUT says the output is valid
+        if int(dut.valid_out.value) == 1:
+            actual_real = dut.t_real.value.to_signed()
+            actual_imag = dut.t_imag.value.to_signed()
+
+        # Get the oldest expected result
+            expected_real, expected_imag = expected_queue.pop(0)
+
+        # Check the real output
+            assert actual_real == expected_real, (
+                f"drain real mismatch: expected={expected_real}, "
+                f"got={actual_real}"
+            )
+
+        # Check the imaginary output
+            assert actual_imag == expected_imag, (
+                f"drain imag mismatch: expected={expected_imag}, "
+                f"got={actual_imag}"
+            )
+
+    # Leave the ReadOnly phase before the next loop iteration
+        await FallingEdge(dut.clk)
+    dut._log.info("PASS: 200 backtoback random transactions")
