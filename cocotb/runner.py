@@ -1,11 +1,12 @@
 from pathlib import Path
-from cocotb.runner import get_runner
+from cocotb_tools.runner import get_runner
 
 
 def run(top: str, test_module: str, sources: list[str]) -> None:
     project_root = Path(__file__).resolve().parents[1]
     rtl_dir = project_root / "rtl"
-    source_paths = [rtl_dir / "fft_pkg.sv"] + [rtl_dir / src for src in sources]
+    source_paths = [rtl_dir / "fft_pkg.sv"] + \
+        [rtl_dir / src for src in sources]
 
     runner = get_runner("icarus")
     runner.build(
@@ -15,3 +16,9 @@ def run(top: str, test_module: str, sources: list[str]) -> None:
         build_args=["-g2012"],
     )
     runner.test(hdl_toplevel=top, test_module=test_module)
+if __name__ == "__main__":
+    run(
+        top="complex_mult",
+        test_module="test_complex_mult",
+        sources=["complex_mult.sv"],
+        )

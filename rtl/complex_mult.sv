@@ -1,3 +1,5 @@
+`timescale 1ns/1ps
+
 module complex_mult #(
     parameter int SAMPLE_W  = fft_pkg::SAMPLE_W,
     parameter int TWIDDLE_W = fft_pkg::TWIDDLE_W,
