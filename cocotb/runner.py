@@ -18,7 +18,7 @@ def run(top: str, test_module: str, sources: list[str]) -> None:
     runner.test(hdl_toplevel=top, test_module=test_module)
 if __name__ == "__main__":
     run(
-        top="complex_mult",
-        test_module="test_complex_mult",
-        sources=["complex_mult.sv"],
-        )
+        top="fft_butterfly",
+        test_module="test_fft_butterfly",
+        sources=["complex_mult.sv", "fft_butterfly.sv"],
+    )   
