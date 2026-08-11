@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module bit_reverse #(
     parameter int WIDTH = fft_pkg::ADDR_W
 ) (

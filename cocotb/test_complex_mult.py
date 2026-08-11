@@ -7,7 +7,7 @@ import random
 
 @cocotb.test()
 async def test_refmodel_complextest(dut):
-    cocotb.log.info("complex_mult test skeleton")
+    cocotb.log.info("complex_mult test ")
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
 
     # basic test for reset

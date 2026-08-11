@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module fft_address_gen #(
     parameter int ADDR_W = fft_pkg::ADDR_W
 ) (

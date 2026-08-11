@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module fft_controller (
     input  logic clk,
     input  logic reset,
@@ -18,5 +19,5 @@ module fft_controller (
     output logic issue_read,
     output logic butterfly_last_in
 );
-    // TODO: IDLE, LOAD, COMPUTE, DRAIN, OUTPUT.
+    
 endmodule

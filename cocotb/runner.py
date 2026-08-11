@@ -16,9 +16,11 @@ def run(top: str, test_module: str, sources: list[str]) -> None:
         build_args=["-g2012"],
     )
     runner.test(hdl_toplevel=top, test_module=test_module)
+
+
 if __name__ == "__main__":
     run(
-        top="fft_butterfly",
-        test_module="test_fft_butterfly",
-        sources=["complex_mult.sv", "fft_butterfly.sv"],
-    )   
+        top="fft_memory",
+        test_module="fft_memory_test",
+        sources=["fft_memory.sv"],
+    )

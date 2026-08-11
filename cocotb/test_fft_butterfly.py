@@ -6,7 +6,7 @@ import random
 
 
 @cocotb.test()
-async def test_refmodel_complextest(dut):
+async def test_refmodel_butterflytest(dut):
     cocotb.log.info("fft_butterfly cocotb test ")
     cocotb.start_soon(Clock(dut.clk, 10, unit="ns").start())
 
