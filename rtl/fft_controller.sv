@@ -19,16 +19,20 @@ module fft_controller (
     output logic [5:0] output_count,
     output logic source_bank,
     output logic issue_read,
-    output logic butterfly_last_in,
+    
     output logic [5:0] write_addr_a,
     output logic [5:0] write_addr_b,
-    output logic       write_enable
+    output logic       write_enable,
+    output logic butterfly_valid_in,
+    output logic butterfly_last_in
 );
 
 logic [5:0] write_addr_a_pipe [0:5];
 logic [5:0] write_addr_b_pipe [0:5];
 
 logic       valid_pipe        [0:5];
+logic butterfly_valid_delay;
+logic butterfly_last_delay;
 
 typedef enum logic [2:0] {
     IDLE,
@@ -140,23 +144,20 @@ always_ff @(posedge clk) begin
         butterfly_count  <= 5'd0;
         stage_count      <= 3'd0;
         source_bank      <= 1'b0;
-        issue_read       <= 1'b0;
-        butterfly_last_in <= 1'b0;
-        done             <= 1'b0;
+        
      end
 
      else begin
        case (state)
 
-       IDLE : load_count<='0;
+       IDLE : begin
+              load_count<='0;
               output_count<='0;
               stage_count<='0;
               butterfly_count<='0;
               source_bank<='0;
-              issue_read<= '0;
-              butterfly_last_in<='0;
-              done<='0;
-            
+       end
+             
        LOAD: 
             if (input_ready && input_valid)
                 if (load_count == 6'd63)
@@ -165,21 +166,77 @@ always_ff @(posedge clk) begin
                     load_count <= load_count +1'b1;
             else 
                 load_count <= load_count;
-       ISSUE:
-       WAIT_STAGE:
-       OUTPUT:
-       DONE:
+       ISSUE: 
+              if (butterfly_count!=5'd31) begin
+                butterfly_count<= butterfly_count +1'd1;
+                
+              end
 
+              
+
+
+       WAIT_STAGE: begin
+                    
+
+                    if (butterfly_last_out) begin
+                        source_bank <= ~source_bank; // this is the ping pong memeory aspect 
+                        if (stage_count != 3'd5)  begin
+                            stage_count <= stage_count + 3'd1;
+                            butterfly_count <= 5'd0;
+                            
+                        end
+                    end
+                end
+
+       OUTPUT: if (output_valid && output_ready)
+                if(output_count == 6'd63) 
+                    output_count<= 6'd0;
+                else
+                    output_count<= output_count +1'd1;
+       DONE: begin //no registered updates
+
+       end
+                
+        endcase
 
      end
-
-
-
-
-
-
 end
+    // The sample memory has a 1cycle synchronous read latency.
+    // When we issue addresses in cycle N, the corresponding A/B sample data does not reach the butterfly until cycle N+1.
+    // Delay valid and last by one clock so these control signals stay aligned with the memory data entering the butterfly.
 
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            butterfly_valid_delay <= 1'b0;
+            butterfly_last_delay  <= 1'b0;
+        end
+        else begin
+            butterfly_valid_delay <= issue_read;
+            butterfly_last_delay  <= issue_read &&
+                                    (butterfly_count == 5'd31);
+        end
+    end
+
+
+
+
+
+
+// these are declared outside because we need these updated as soon as possible
+//inside the always ff block these are sequentiial and only apply once every clock edge and this can an extra issuence in butterflies.
+assign input_ready  = (state == LOAD);
+assign output_valid = (state == OUTPUT);
+assign done         = (state == DONE);
+assign busy         = (state != IDLE) && (state != DONE);
+
+assign issue_read = (state == ISSUE);
+
+assign butterfly_valid_in = butterfly_valid_delay;
+assign butterfly_last_in  = butterfly_last_delay;
+
+assign write_addr_a = write_addr_a_pipe[5];
+assign write_addr_b = write_addr_b_pipe[5];
+assign write_enable = butterfly_valid_out;
 
 
     
