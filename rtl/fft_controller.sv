@@ -133,9 +133,6 @@ always_ff @(posedge clk) begin
 
 end
 
-    assign write_addr_a = write_addr_a_pipe[5];
-    assign write_addr_b = write_addr_b_pipe[5];
-    assign write_enable = valid_pipe[5];
 
 always_ff @(posedge clk) begin
      if (reset) begin

@@ -20,7 +20,7 @@ def run(top: str, test_module: str, sources: list[str]) -> None:
 
 if __name__ == "__main__":
     run(
-        top="fft_memory",
-        test_module="fft_memory_test",
-        sources=["fft_memory.sv"],
+        top="fft_controller",
+        test_module="fft_controller_test",
+        sources=["fft_controller.sv"],
     )
