@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module twiddle_rom #(
     parameter int TWIDDLE_W = fft_pkg::TWIDDLE_W
 ) (
@@ -71,7 +72,7 @@ end
 // corresponding real and imaginary twiddle values appear after the next rising clock edge.
 // This gives the twiddle ROM a 1 cycle latency matching the
 // 1cycle synchronous sample-memory read latency.
-    always_ff (@posedge clk) begin
+    always_ff @(posedge clk) begin
         w_real <= twiddle_real[addr];
         w_imag <= twiddle_imag[addr];
     end
