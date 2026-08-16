@@ -83,6 +83,14 @@ module fft_top (
 
     logic [3:0] butterfly_last_out_pipe;
 
+   
+
+    logic controller_output_valid;
+
+    logic output_valid_delay;
+    logic [fft_pkg::ADDR_W-1:0] output_bin_delay;
+    logic output_bank_delay;
+
     fft_address_gen addr_gen (.stage(stage_count),
         .butterfly_count(butterfly_count),
         .addr_a(addr_a),
@@ -108,7 +116,7 @@ module fft_top (
         .addr_b(addr_b),
         .butterfly_last_out(butterfly_last_out),
         .input_ready(input_ready),
-        .output_valid(output_valid),
+        .output_valid(controller_output_valid),
         .busy(busy),
         .done(done),
         .stage_count(stage_count),
@@ -241,7 +249,7 @@ module fft_top (
     
     // output_valid is high while the controller is in OUTPUT.
     // The final FFT results are stored in source_bank.
-    else if (output_valid) begin
+    else if (controller_output_valid) begin
 
         if (source_bank) begin
             // Final data is in mem1
@@ -318,6 +326,35 @@ module fft_top (
     end
 
 end
+
+    // fft_memory has a 1-cycle synchronous read latency.
+    // Delay the output metadata by one cycle so output_bin/output_valid
+    // line up with the actual FFT sample coming out of memory.
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            output_valid_delay <= 1'b0;
+            output_bin_delay   <= '0;
+            output_bank_delay  <= 1'b0;
+        end
+        else begin
+            output_valid_delay <= controller_output_valid;
+
+            if (controller_output_valid) begin
+                output_bin_delay  <= output_count;
+                output_bank_delay <= source_bank;
+            end
+        end
+    end
+
+    assign output_valid = output_valid_delay;
+    assign output_bin   = output_bin_delay;
+
+    assign output_real =
+        output_bank_delay ? mem1_a_rreal : mem0_a_rreal;
+
+    assign output_imag =
+        output_bank_delay ? mem1_a_rimag : mem0_a_rimag;
+
 
     always_ff @(posedge clk) begin
         if (reset) begin

@@ -20,7 +20,16 @@ def run(top: str, test_module: str, sources: list[str]) -> None:
 
 if __name__ == "__main__":
     run(
-        top="twiddle_rom",
-        test_module="twiddle_rom_test",
-        sources=["twiddle_rom.sv"],
+        top="fft_top",
+        test_module="fft_top_test",
+        sources=[
+    "complex_mult.sv",
+    "fft_butterfly.sv",
+    "fft_address_gen.sv",
+    "bit_reverse.sv",
+    "fft_memory.sv",
+    "twiddle_rom.sv",
+    "fft_controller.sv",
+    "fft_top.sv",
+    ],
     )
