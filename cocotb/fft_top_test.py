@@ -2,6 +2,8 @@ import cocotb
 from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge, FallingEdge, ReadOnly
 import random
+import numpy as np
+import math 
 
 
 @cocotb.test()
@@ -101,3 +103,27 @@ async def test_fft_top(dut):
             )
 
     cocotb.log.info("PASS: 64-point impulse FFT")
+
+
+    ## now we will create some numpy modules to compare with
+    N = 64
+    tone_bin = 5
+    amplitude = 0.25
+
+    samples = []
+
+    for n in range(N):
+        angle = 2 * math.pi * tone_bin * n / N
+        value = amplitude * math.cos(angle)
+
+        q15_value = round(value * (1 << 15))
+
+        samples.append(q15_value) 
+    samples_float = np.array(samples) / (1<<15)
+    expected_fft = np.fft.fft(samples_float)
+
+    for k in range(64):
+        cocotb.log.info(
+            f"ref bin {k}: real={expected_fft[k].real}, "
+            f"imag={expected_fft[k].imag}"
+        )
