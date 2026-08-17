@@ -21,29 +21,28 @@ module fft_memory #(
 );
    
 
-    logic signed [SAMPLE_W-1:0] mem_real [0:DEPTH-1];
-    logic signed [SAMPLE_W-1:0] mem_imag [0:DEPTH-1];
+        (* ram_style = "block" *)
+        logic [2*SAMPLE_W-1:0] mem [0:DEPTH-1];
 
-    always_ff @( posedge clk ) begin 
-        port_a_rreal <= mem_real[port_a_addr];
-        port_a_rimag <= mem_imag[port_a_addr];
+       
 
-        port_b_rreal <= mem_real[port_b_addr];
-        port_b_rimag <= mem_imag[port_b_addr];
+        always_ff @(posedge clk) begin
+            port_a_rreal <= mem[port_a_addr][2*SAMPLE_W-1:SAMPLE_W];
+            port_a_rimag <= mem[port_a_addr][SAMPLE_W-1:0];
 
-        if (port_a_we == 1) begin
-            mem_real[port_a_addr]<= port_a_wreal;
-            mem_imag[port_a_addr]<= port_a_wimag;
-        end
-        if (port_b_we ==1) begin
-            mem_real[port_b_addr]<= port_b_wreal;
-            mem_imag[port_b_addr]<= port_b_wimag;
+            if (port_a_we) begin
+                mem[port_a_addr] <= {port_a_wreal, port_a_wimag};
+            end
         end
 
+        always_ff @(posedge clk) begin
+            port_b_rreal <= mem[port_b_addr][2*SAMPLE_W-1:SAMPLE_W];
+            port_b_rimag <= mem[port_b_addr][SAMPLE_W-1:0];
 
-
-        
-    end
+            if (port_b_we) begin
+                mem[port_b_addr] <= {port_b_wreal, port_b_wimag};
+            end
+        end
 
 
 endmodule

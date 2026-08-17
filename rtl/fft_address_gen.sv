@@ -37,21 +37,74 @@ module fft_address_gen #(
 
 
 
-logic [ADDR_W-1:0] H;
-logic [ADDR_W-1:0] group;
-logic [ADDR_W-1:0] j;
-logic [ADDR_W-1:0] group_start;
+always_comb begin
 
-    always_comb begin
-        H = 1 << stage;
-        group = butterfly_count/H;
-        j = butterfly_count%H;
-        group_start = group*2*H;
+    addr_a = '0;
+    addr_b = '0;
+    twiddle_addr = '0;
 
-        addr_a = group_start +j;
-        addr_b = addr_a+H;
-        twiddle_addr = j*fft_pkg::FFT_N/(2*H);
-    end
+    case (stage)
+
+        3'd0: begin
+            // H = 1
+            addr_a = {butterfly_count, 1'b0};
+            addr_b = addr_a + 6'd1;
+            twiddle_addr = 5'd0;
+        end
+
+        3'd1: begin
+            // H = 2
+            addr_a = {butterfly_count[4:1], 2'b00}
+                   + butterfly_count[0];
+            addr_b = addr_a + 6'd2;
+
+            twiddle_addr = butterfly_count[0] << 4;
+        end
+
+        3'd2: begin
+            // H = 4
+            addr_a = {butterfly_count[4:2], 3'b000}
+                   + butterfly_count[1:0];
+            addr_b = addr_a + 6'd4;
+
+            twiddle_addr = butterfly_count[1:0] << 3;
+        end
+
+        3'd3: begin
+            // H = 8
+            addr_a = {butterfly_count[4:3], 4'b0000}
+                   + butterfly_count[2:0];
+            addr_b = addr_a + 6'd8;
+
+            twiddle_addr = butterfly_count[2:0] << 2;
+        end
+
+        3'd4: begin
+            // H = 16
+            addr_a = {butterfly_count[4], 5'b00000}
+                   + butterfly_count[3:0];
+            addr_b = addr_a + 6'd16;
+
+            twiddle_addr = butterfly_count[3:0] << 1;
+        end
+
+        3'd5: begin
+            // H = 32
+            addr_a = {1'b0, butterfly_count};
+            addr_b = addr_a + 6'd32;
+
+            twiddle_addr = butterfly_count;
+        end
+
+        default: begin
+            addr_a = '0;
+            addr_b = '0;
+            twiddle_addr = '0;
+        end
+
+    endcase
+
+end
 
 
 
