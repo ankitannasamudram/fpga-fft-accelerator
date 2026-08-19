@@ -17,19 +17,35 @@ def run(top: str, test_module: str, sources: list[str]) -> None:
     )
     runner.test(hdl_toplevel=top, test_module=test_module)
 
+## testing complete integration
+ #if __name__ == "__main__":
+    #run(
+        #top="fft_top",
+        #test_module="fft_top_test",
+        #sources=[
+    #"complex_mult.sv",
+    #"fft_butterfly.sv",
+    #"fft_address_gen.sv",
+    #"bit_reverse.sv",
+    #"fft_memory.sv",
+    #"twiddle_rom.sv",
+    #"fft_controller.sv",
+   # "fft_top.sv",
+   # ],
+   # ) 
 
+## testing uart rx complete integration'
 if __name__ == "__main__":
     run(
-        top="fft_top",
-        test_module="fft_top_test",
+        top="uart_rx_integration",
+        test_module="test_uart_rx_integration",
         sources=[
-    "complex_mult.sv",
-    "fft_butterfly.sv",
-    "fft_address_gen.sv",
-    "bit_reverse.sv",
-    "fft_memory.sv",
-    "twiddle_rom.sv",
-    "fft_controller.sv",
-    "fft_top.sv",
-    ],
+            "uart_rx.sv",
+            "uart_sample_assembler.sv",
+            "uart_rx_integration.sv",
+        ],
     )
+
+
+
+
