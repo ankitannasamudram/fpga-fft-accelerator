@@ -9,8 +9,8 @@ input  logic [7:0] rx_data,
 input  logic       rx_valid,
 
 output logic signed [15:0] sample_real,
-output logic signed [15:0] sample_imag
-output logic               sample_valid,
+output logic signed [15:0] sample_imag,
+output logic               sample_valid
 );
 
 logic [7:0] real_low;
@@ -38,25 +38,33 @@ always_ff @(posedge clk) begin
     end
 
     else begin
-        
+        sample_valid <= 1'b0;
 
         if (rx_valid) begin
             case( byte_count) 
 
-                2'd0 : real_low <= rx_data;
-                        byte_count<= byte_count+1; 
-                2'd1 :  real_high <= rx_data;
-                        byte_count<= byte_count+1;
-                2'd2 : imag_low <= rx_data;
-                        byte_count<= byte_count+1;
-                2'd3 : imag_high <= rx_data;
+                2'd0 : begin real_low <= rx_data;
+                        byte_count<= byte_count+1'b1; 
+                end
+                2'd1 : begin real_high <= rx_data;
+                        byte_count<= byte_count+1'b1;
+                end
+                2'd2 : begin imag_low <= rx_data;
+                        byte_count<= byte_count+1'b1;
+                end
+                2'd3 : begin imag_high <= rx_data;
                         byte_count<= 2'd0;
                         sample_valid <=1'b1;
                         sample_real <= {real_high, real_low};
                         sample_imag <= {rx_data, imag_low}; 
-                        // included here and not in an assign statement because 
-                        //we do not want errors with sample-valid going high while sample_imag reflects the old value during that clock edge 
 
+                end
+                        // included here and not in an assign statement because 
+                        //we do not want errors with sample-valid going high while sample_imag
+                        // reflects the old value during that clock edge 
+            endcase
+
+        end
     end
 
     
