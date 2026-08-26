@@ -1,6 +1,6 @@
 import cocotb
 from cocotb.clock import Clock
-from cocotb.triggers import RisingEdge, FallingEdge, ReadOnly, Timer
+from cocotb.triggers import RisingEdge, FallingEdge, Timer
 import numpy as np
 import math
 
@@ -15,45 +15,116 @@ BIT_TIME_NS = CLKS_PER_BIT * 10
 # it sends one UART byte into the FPGA uart_rx pin
 async def send_uart_byte(dut, byte):
 
-    # UART start bit is low
+    # send start bit
     dut.uart_rx.value = 0
     await Timer(BIT_TIME_NS, unit="ns")
 
-    # send the 8 data bits LSB first
+    # send 8 data bits LSB first
     for i in range(8):
         dut.uart_rx.value = (byte >> i) & 1
         await Timer(BIT_TIME_NS, unit="ns")
 
-    # UART stop bit is high
+    # send stop bit
     dut.uart_rx.value = 1
     await Timer(BIT_TIME_NS, unit="ns")
 
 
-# each complex FFT sample needs 4 UART bytes
-# byte 0 = real low
-# byte 1 = real high
-# byte 2 = imag low
-# byte 3 = imag high
+# each complex FFT input sample is sent as 4 UART bytes
+# real low, real high, imag low, imag high
 async def send_complex_sample(dut, real_value, imag_value):
 
-    # keep only the lower 16 bits so negative python integers
-    # are represented using their 16 bit two's complement form
+    # convert signed python values into 16 bit two's complement
     real_value = real_value & 0xFFFF
     imag_value = imag_value & 0xFFFF
 
-    # split the 16 bit real value into two 8 bit UART bytes
     real_low = real_value & 0xFF
     real_high = (real_value >> 8) & 0xFF
 
-    # split the 16 bit imaginary value into two 8 bit UART bytes
     imag_low = imag_value & 0xFF
     imag_high = (imag_value >> 8) & 0xFF
 
-    # send the four bytes in the order expected by the assembler
     await send_uart_byte(dut, real_low)
     await send_uart_byte(dut, real_high)
     await send_uart_byte(dut, imag_low)
     await send_uart_byte(dut, imag_high)
+
+
+# this task acts like the PC UART receiver
+# it decodes one byte coming from the FPGA uart_tx pin
+async def receive_uart_byte(dut):
+
+    # wait for the UART line to go low which means start bit
+    while dut.uart_tx.value == 1:
+        await RisingEdge(dut.clk)
+
+    # move to the middle of the start bit
+    for _ in range(CLKS_PER_BIT // 2):
+        await RisingEdge(dut.clk)
+
+    assert dut.uart_tx.value == 0, "Invalid UART start bit"
+
+    # move one full bit time to the middle of data bit 0
+    for _ in range(CLKS_PER_BIT):
+        await RisingEdge(dut.clk)
+
+    received = 0
+
+    # sample all 8 data bits LSB first
+    for i in range(8):
+
+        bit_value = int(dut.uart_tx.value)
+
+        received |= bit_value << i
+
+        for _ in range(CLKS_PER_BIT):
+            await RisingEdge(dut.clk)
+
+    # we should now be in the middle of the stop bit
+    assert dut.uart_tx.value == 1, "Invalid UART stop bit"
+
+    return received
+
+
+# convert a 24 bit two's complement number into a signed python integer
+def signed24(value):
+
+    value &= 0xFFFFFF
+
+    if value & 0x800000:
+        return value - 0x1000000
+
+    return value
+
+
+# receive the six UART bytes that make up one FFT output bin
+async def receive_fft_bin(dut):
+
+    real_low = await receive_uart_byte(dut)
+    real_mid = await receive_uart_byte(dut)
+    real_high = await receive_uart_byte(dut)
+
+    imag_low = await receive_uart_byte(dut)
+    imag_mid = await receive_uart_byte(dut)
+    imag_high = await receive_uart_byte(dut)
+
+    # rebuild the original 24 bit sign extended real value
+    real_value = (
+        real_low
+        | (real_mid << 8)
+        | (real_high << 16)
+    )
+
+    # rebuild the original 24 bit sign extended imaginary value
+    imag_value = (
+        imag_low
+        | (imag_mid << 8)
+        | (imag_high << 16)
+    )
+
+    real_value = signed24(real_value)
+    imag_value = signed24(imag_value)
+
+    return real_value, imag_value
 
 
 @cocotb.test()
@@ -64,7 +135,6 @@ async def test_uart_fft_top(dut):
         Clock(dut.clk, 10, unit="ns").start()
     )
 
-    # use the same tone test that already passed in fft_top_test.py
     N = 64
     TOLERANCE = 4
     tone_bin = 5
@@ -73,7 +143,7 @@ async def test_uart_fft_top(dut):
     samples_real = []
     samples_imag = []
 
-    # generate a real cosine tone in Q1.15 format
+    # generate the same cosine tone used in the original fft_top test
     for n in range(N):
 
         angle = 2 * math.pi * tone_bin * n / N
@@ -84,8 +154,7 @@ async def test_uart_fft_top(dut):
         samples_real.append(q15_value)
         samples_imag.append(0)
 
-    # convert the same fixed point samples back into floating point
-    # so NumPy can calculate the expected FFT
+    # calculate NumPy reference FFT
     samples_complex = (
         np.array(samples_real) / (1 << 15)
         + 1j * np.array(samples_imag) / (1 << 15)
@@ -96,20 +165,16 @@ async def test_uart_fft_top(dut):
     # safe initial inputs
     dut.reset.value = 1
     dut.start.value = 0
-
-    # UART sits high when nothing is being transmitted
     dut.uart_rx.value = 1
 
     # hold reset for a couple clocks
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
 
-    # release reset on the falling edge
     await FallingEdge(dut.clk)
     dut.reset.value = 0
 
-    # pulse start for one clock
-    # this moves the FFT controller from IDLE into LOAD
+    # pulse start so fft_top enters the LOAD state
     await FallingEdge(dut.clk)
     dut.start.value = 1
 
@@ -118,48 +183,147 @@ async def test_uart_fft_top(dut):
     await FallingEdge(dut.clk)
     dut.start.value = 0
 
-    # give the FFT controller a couple cycles to settle into LOAD
     await RisingEdge(dut.clk)
     await RisingEdge(dut.clk)
 
-    cocotb.log.info("START pressed, FFT should now be waiting for UART samples")
-
-   
+    cocotb.log.info("START pressed, FFT waiting for UART samples")
 
     outputs = []
 
-    # watch for FFT outputs while the UART samples are still being transmitted
+
+    # this runs at the same time as the input UART transmission
+    # and waits for FFT results to come back through uart_tx
     async def collect_outputs():
 
-        while len(outputs) < 64:
+        for bin_index in range(64):
 
-            await RisingEdge(dut.clk)
-            await ReadOnly()
+            real, imag = await receive_fft_bin(dut)
 
-            if dut.fft_output_valid.value:
+            outputs.append(
+                (bin_index, real, imag)
+            )
 
-                real = dut.fft_output_real.value.to_signed()
-                imag = dut.fft_output_imag.value.to_signed()
-
-                # FFT outputs come out sequentially from bin 0 to bin 63
-                bin_index = len(outputs)
-
-                outputs.append(
-                    (bin_index, real, imag)
-                )
-
-                cocotb.log.info(
-                    f"bin {bin_index}: real={real}, imag={imag}"
-                )
+            cocotb.log.info(
+                f"received bin {bin_index}: "
+                f"real={real}, imag={imag}"
+            )
 
 
-    # start watching the FFT before sending the UART frame
+    # start listening to uart_tx before we send the input frame
     output_collector = cocotb.start_soon(
         collect_outputs()
     )
 
+    async def watch_done():
 
-    # send all 64 complex samples through the actual UART serial input
+        while True:
+
+            await RisingEdge(dut.clk)
+
+            if dut.done.value:
+                cocotb.log.info(
+                    f"FFT DONE asserted at {cocotb.utils.get_sim_time(unit='ns')} ns"
+                )
+                return
+
+
+    done_watcher = cocotb.start_soon(
+        watch_done()
+    )
+
+        # count every byte that the serializer gives to uart_tx
+    async def watch_serializer():
+
+        byte_count = 0
+
+        while byte_count < 384:
+
+            await RisingEdge(dut.clk)
+
+            if dut.serializer.tx_valid.value:
+
+                byte_count += 1
+
+                if byte_count >= 370:
+                    cocotb.log.info(
+                        f"serializer byte {byte_count}: "
+                        f"data=0x{int(dut.serializer.tx_data.value):02X}"
+                    )
+
+        cocotb.log.info(
+            f"SERIALIZER FINISHED: {byte_count} bytes sent"
+        )
+
+
+    serializer_watcher = cocotb.start_soon(
+        watch_serializer()
+    )
+
+        # count each time uart_tx starts transmitting a byte
+    async def watch_uart_tx():
+
+        transmission_count = 0
+        previous_busy = 0
+
+        while transmission_count < 384:
+
+            await RisingEdge(dut.clk)
+
+            current_busy = int(dut.transmitter.tx_busy.value)
+
+            # rising edge of tx_busy means uart_tx accepted a new byte
+            if current_busy == 1 and previous_busy == 0:
+
+                transmission_count += 1
+
+                if transmission_count >= 370:
+                    cocotb.log.info(
+                        f"uart_tx transmission {transmission_count}"
+                    )
+
+            previous_busy = current_busy
+
+        cocotb.log.info(
+            f"UART_TX FINISHED: {transmission_count} bytes accepted"
+        )
+
+
+    uart_tx_watcher = cocotb.start_soon(
+        watch_uart_tx()
+    )
+
+        # count every FFT output accepted by the serializer
+    async def watch_fft_handshakes():
+
+        handshake_count = 0
+
+        while handshake_count < 64:
+
+            await RisingEdge(dut.clk)
+
+            if dut.fft_output_valid.value and dut.fft_output_ready.value:
+
+                handshake_count += 1
+
+                if handshake_count >= 60:
+                    cocotb.log.info(
+                        f"FFT HANDSHAKE {handshake_count}: "
+                        f"output_count={int(dut.fft_core.output_count.value)}, "
+                        f"real={dut.fft_output_real.value.to_signed()}, "
+                        f"imag={dut.fft_output_imag.value.to_signed()}"
+                    )
+
+        cocotb.log.info(
+            f"FFT HANDSHAKES FINISHED: {handshake_count}"
+        )
+
+
+    fft_handshake_watcher = cocotb.start_soon(
+        watch_fft_handshakes()
+    )
+
+
+    # send all 64 complex input samples through uart_rx
     for i in range(64):
 
         await send_complex_sample(
@@ -168,22 +332,21 @@ async def test_uart_fft_top(dut):
             samples_imag[i]
         )
 
-    cocotb.log.info("PASS: sent all 64 samples through UART")
+    cocotb.log.info("PASS: sent all 64 input samples through UART")
 
 
-    # wait until the output collector has captured all 64 FFT bins
+    # wait until all 64 FFT output bins have come back over uart_tx
     await output_collector
 
-    cocotb.log.info("PASS: captured all 64 FFT outputs")
+    cocotb.log.info("PASS: received all 64 FFT bins through UART")
 
-    # compare the FPGA FFT outputs against NumPy
+
+    # compare FPGA output against NumPy
     max_real_error = 0
     max_imag_error = 0
 
     for bin_index, dut_real, dut_imag in outputs:
 
-        # NumPy gives floating point FFT values
-        # scale them back into the same fixed point scale used by the FPGA
         expected_real = round(
             expected_fft[bin_index].real * (1 << 15)
         )
@@ -227,7 +390,7 @@ async def test_uart_fft_top(dut):
         )
 
     cocotb.log.info(
-        f"UART FFT TEST PASSED: "
+        f"FULL UART FFT TEST PASSED: "
         f"max real error={max_real_error}, "
         f"max imag error={max_imag_error}"
     )

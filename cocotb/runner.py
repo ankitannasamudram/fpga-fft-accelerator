@@ -33,6 +33,9 @@ if __name__ == "__main__":
             "uart_rx.sv",
             "uart_sample_assembler.sv",
             "uart_fft_top.sv",
+            "uart_fft_serializer.sv",
+            "uart_tx.sv",
+
         ],
     )
 

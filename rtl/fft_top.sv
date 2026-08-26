@@ -90,6 +90,7 @@ module fft_top (
     logic output_valid_delay;
     logic [fft_pkg::ADDR_W-1:0] output_bin_delay;
     logic output_bank_delay;
+    logic controller_output_ready;
 
     fft_address_gen addr_gen (.stage(stage_count),
         .butterfly_count(butterfly_count),
@@ -110,7 +111,7 @@ module fft_top (
         .reset(reset),
         .start(start),
         .input_valid(input_valid),
-        .output_ready(output_ready),
+        .output_ready(controller_output_ready),
         .butterfly_valid_out(butterfly_valid_out),
         .addr_a(addr_a),
         .addr_b(addr_b),
@@ -348,6 +349,13 @@ end
 
     assign output_valid = output_valid_delay;
     assign output_bin   = output_bin_delay;
+
+    // only let the controller advance when the delayed BRAM output
+    // is actually valid and the downstream module is ready
+
+    assign controller_output_ready = output_ready && output_valid_delay;
+
+    
 
     assign output_real =
         output_bank_delay ? mem1_a_rreal : mem0_a_rreal;
