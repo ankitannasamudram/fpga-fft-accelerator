@@ -14,8 +14,7 @@ The main tools were:
 - Vivado
 - Nexys A7-100T hardware
 
-I did not use UVM or claim functional-coverage closure. The focus was directed
-testing, randomized self-checking tests, numerical comparison, timing checks, and
+The focus was directed testing, randomized self-checking tests, numerical comparison, timing checks, and
 full hardware validation.
 
 ---
