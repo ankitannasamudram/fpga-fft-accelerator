@@ -21,8 +21,94 @@ The final routed design closes timing at 100 MHz.
 - Hold failing endpoints: **0**
 
 Positive WNS and WHS mean the final design has setup and hold margin.
-
 There are no setup or hold timing violations.
+
+---
+
+## Address Generator Timing Closure
+
+The initial implementation of `fft_address_gen.sv` used generic
+stage-dependent arithmetic to calculate the butterfly and twiddle addresses:
+
+```text
+H = 1 << stage
+group = butterfly_count / H
+j = butterfly_count % H
+group_start = group * 2 * H
+
+addr_a = group_start + j
+addr_b = addr_a + H
+twiddle_addr = j * 64 / (2 * H)
+```
+
+The equations were functionally correct, but `stage` is a runtime signal.
+As a result, Vivado synthesized the variable shift, division, modulo, and
+multiplication into a deep combinational path.
+
+Initial post-route timing at the 100 MHz target showed:
+
+- WNS: **-11.100 ns**
+- TNS: **-676.130 ns**
+- Logic levels: **35**
+- Fanout: **121**
+- Worst path delay: **~20.77 ns**
+
+The worst path originated from:
+
+```text
+controller/stage_count_reg[1]
+```
+
+and propagated through the stage-dependent address-generation logic in
+`fft_address_gen.sv`.
+
+A 64-point radix-2 FFT has only six stages, so the generic arithmetic was
+replaced with a 6-way `case(stage)` implementation. Each stage uses fixed
+bit slices, concatenations, constant shifts, and simple additions instead
+of variable division, modulo, and multiplication.
+
+Conceptually:
+
+```text
+Before:
+
+stage
+  |
+  v
+variable shift / divide / modulo / multiply
+  |
+  v
+35-level combinational path
+  |
+  v
+FAIL 100 MHz
+
+
+After:
+
+stage
+  |
+  v
+6-way case
+  |
+  v
+constant wiring + simple arithmetic
+  |
+  v
+PASS 100 MHz
+```
+
+After rewriting the address generator, timing improved to:
+
+- WNS: **+0.930 ns**
+- TNS: **0.000 ns**
+- WHS: **+0.156 ns**
+- Failing endpoints: **0**
+
+The optimized FFT therefore met the 10 ns clock requirement. After UART
+receive/transmit logic, sample assembly, serialization, and the board wrapper
+were integrated, the final `fft_board_top` still closed timing at 100 MHz
+with **+0.735 ns WNS**.
 
 ---
 
@@ -67,7 +153,6 @@ The final physical test received all **384 bytes**.
 
 ---
 
-
 ## UART Throughput and End-to-End Timing
 
 The FPGA operates at 100 MHz and completes a 64-point FFT in 355 cycles
@@ -95,6 +180,7 @@ computation.
 
 As a result, the current hardware demo is limited primarily by the
 115200-baud UART interface rather than FFT computation throughput.
+
 ---
 
 ## Final Hardware Path

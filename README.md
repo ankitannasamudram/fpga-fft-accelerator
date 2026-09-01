@@ -79,7 +79,86 @@ final bank is read sequentially to output FFT bins 0 through 63.
 
 More detail is in [docs/architecture.md](docs/architecture.md).
 
+---
 
+## Timing Closure Optimization
+
+The first implementation of `fft_address_gen.sv` used generic stage-dependent
+arithmetic to generate butterfly and twiddle addresses:
+
+```text
+H = 1 << stage
+group = butterfly_count / H
+j = butterfly_count % H
+group_start = group * 2 * H
+
+addr_a = group_start + j
+addr_b = addr_a + H
+twiddle_addr = j * 64 / (2 * H)
+```
+
+The addressing math was correct, but `stage` is a runtime signal. Vivado therefore
+implemented the variable shift, division, modulo, and multiplication as combinational
+logic. Post-route timing showed that this created the design's critical path.
+
+**Initial post-route timing at 100 MHz**
+
+- WNS: **-11.100 ns**
+- TNS: **-676.130 ns**
+- Critical-path logic levels: **35**
+- Critical-path fanout: **121**
+- Worst path delay: **~20.77 ns**
+
+The worst path started from `controller/stage_count_reg[1]` and propagated through
+the stage-dependent address-generation logic.
+
+Because a 64-point radix-2 FFT has only six stages, I replaced the generic arithmetic
+with a 6-way `case(stage)` implementation. Each stage uses fixed bit slices,
+concatenations, constant shifts, and simple additions instead of variable
+division/modulo arithmetic.
+
+Conceptually:
+
+```text
+Before:
+
+stage
+  |
+  v
+variable shift / divide / modulo / multiply
+  |
+  v
+35-level combinational path
+  |
+  v
+FAIL 100 MHz
+
+
+After:
+
+stage
+  |
+  v
+6-way case
+  |
+  v
+constant wiring + simple arithmetic
+  |
+  v
+PASS 100 MHz
+```
+
+After rewriting the address generator, the FFT implementation closed timing at
+100 MHz:
+
+- WNS: **+0.930 ns**
+- TNS: **0.000 ns**
+- WHS: **+0.156 ns**
+- Failing endpoints: **0**
+
+After the UART and board-level logic were integrated, the final routed
+`fft_board_top` still closed timing at 100 MHz with **+0.735 ns WNS** and zero
+setup/hold failing endpoints.
 
 ---
 
@@ -158,9 +237,9 @@ The FFT core completes a full 64-point transform in 355 cycles (3.55 us)
 at 100 MHz. The hardware demo is instead dominated by the 115200-baud UART:
 a 256-byte input frame requires ~22.2 ms and the 384-byte output frame
 requires ~33.3 ms, for ~55.6 ms of total serial wire time per transform.
+
 Thus, the current end-to-end demo is communication bound rather than
 compute bound.
-
 
 ---
 
