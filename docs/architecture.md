@@ -20,7 +20,7 @@ The butterfly is:
 - fully pipelined
 - II = 1
 
-[Open the architecture diagram PDF](./fft_architecture.pdf)
+
 
 ---
 
@@ -93,7 +93,7 @@ The main blocks are:
 
 ## Controller
 
-The controller runs the FFT one frame at a time.
+The FSM controller runs the FFT one frame at a time.
 
 Main states:
 
@@ -331,4 +331,6 @@ For this project I wanted to focus on:
 - real FPGA integration
 
 Using one II=1 butterfly with ping-pong memory made those tradeoffs much more
-visible than a purely parallel implementation.
+visible than a purely parallel implementation. Also, the UART protocol took 
+significantly more time than the FFT core, so I decided to focus more on 
+resource utilization and timing rather than making the FFT itself faster.
