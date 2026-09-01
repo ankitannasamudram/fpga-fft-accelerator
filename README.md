@@ -158,8 +158,8 @@ The FFT core completes a full 64-point transform in 355 cycles (3.55 us)
 at 100 MHz. The hardware demo is instead dominated by the 115200-baud UART:
 a 256-byte input frame requires ~22.2 ms and the 384-byte output frame
 requires ~33.3 ms, for ~55.6 ms of total serial wire time per transform.
-Thus, the current end-to-end demo is communication-bound rather than
-compute-bound.
+Thus, the current end-to-end demo is communication bound rather than
+compute bound.
 
 
 ---
